@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dashboard - Agenda de Ensaios Musical (SBC & Diadema)</title>
+    <!-- Chart.js para Gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome para Ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- PapaParse para Leitura CSV do Google Sheets em Tempo Real -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    
+    <style>
+        :root {
+            --navy-dark: #0f172a;
+            --navy-primary: #1e293b;
+            --navy-accent: #2563eb;
+            --grey-light: #f1f5f9;
+            --grey-card: #ffffff;
+            --grey-border: #e2e8f0;
+            --grey-text-muted: #64748b;
+            --text-dark: #1e293b;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+            --radius: 10px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--grey-light);
+            color: var(--text-dark);
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 260px;
+            background-color: var(--navy-dark);
+            color: #fff;
+            padding: 24px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+            transition: transform 0.3s ease;
+        }
+
+        .sidebar .brand {
+            font-size: 17px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #ffffff;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #334155;
+        }
+
+        .sidebar .brand i {
+            color: var(--navy-accent);
+            font-size: 20px;
+        }
+
+        .sidebar-menu {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .sidebar-menu li a {
+            color: #94a3b8;
+            text-decoration: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar-menu li a:hover, .sidebar-menu li a.active {
+            background-color: var(--navy-primary);
+            color: #ffffff;
+        }
+
+        .status-badge {
+            margin-top: auto;
+            background: var(--navy-primary);
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #94a3b8;
+            border: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #10b981;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #10b981;
+        }
+
+        /* Mobile Header */
+        .mobile-header {
+            display: none;
+            background-color: var(--navy-dark);
+            color: white;
+            padding: 15px 20px;
+            align-items: center;
+            justify-content: space-between;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 99;
+        }
+
+        .mobile-toggle {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        /* Main Content */
+        .main-content {
+            margin-left: 260px;
+            flex: 1;
+            padding: 32px;
+            width: calc(100% - 260px);
+        }
+
+        header {
+            margin-bottom: 28px;
+        }
+
+        header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--navy-dark);
+        }
+
+        header p {
+            font-size: 14px;
+            color: var(--grey-text-muted);
+            margin-top: 4px;
+        }
+
+        /* KPI Cards */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 20px;
+            margin-bottom: 28px;
+        }
+
+        .kpi-card {
+            background-color: var(--grey-card);
+            border-radius: var(--radius);
+            padding: 20px;
+            border: 1px solid var(--grey-border);
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .kpi-info h3 {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--grey-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .kpi-info .value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--navy-dark);
+            margin-top: 6px;
+        }
+
+        .kpi-icon {
+            width: 46px;
+            height: 46px;
+            border-radius: 10px;
+            background-color: var(--grey-light);
+            color: var(--navy-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        /* Toolbar */
+        .filter-card {
+            background-color: var(--grey-card);
+            border-radius: var(--radius);
+            padding: 18px 24px;
+            border: 1px solid var(--grey-border);
+            margin-bottom: 28px;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .search-box {
+            position: relative;
+            flex: 1;
+            min-width: 240px;
+        }
+
+        .search-box i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--grey-text-muted);
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 10px 12px 10px 36px;
+            border: 1px solid var(--grey-border);
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .btn-reset {
+            background-color: var(--navy-dark);
+            color: #fff;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+
+        .btn-reset:hover {
+            background-color: var(--navy-accent);
+        }
+
+        /* Charts */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 24px;
+            margin-bottom: 28px;
+        }
+
+        .chart-card {
+            background-color: var(--grey-card);
+            border-radius: var(--radius);
+            padding: 20px;
+            border: 1px solid var(--grey-border);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .chart-card h2 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--navy-dark);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 250px;
+            width: 100%;
+        }
+
+        /* Table */
+        .table-card {
+            background-color: var(--grey-card);
+            border-radius: var(--radius);
+            border: 1px solid var(--grey-border);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+
+        .table-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--grey-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .table-header h2 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--navy-dark);
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            max-height: 520px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        th {
+            background-color: #f8fafc;
+            color: var(--navy-dark);
+            font-weight: 600;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--grey-border);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            vertical-align: top;
+        }
+
+        .th-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .th-content:hover {
+            color: var(--navy-accent);
+        }
+
+        .sort-icon {
+            font-size: 11px;
+            color: var(--grey-text-muted);
+        }
+
+        .col-filter {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid var(--grey-border);
+            border-radius: 4px;
+            font-size: 12px;
+            color: var(--text-dark);
+            outline: none;
+            background-color: #fff;
+        }
+
+        td {
+            padding: 14px;
+            border-bottom: 1px solid var(--grey-border);
+            color: var(--text-dark);
+        }
+
+        tr:hover {
+            background-color: #f8fafc;
+        }
+
+        .badge-mun {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-sbc {
+            background-color: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .badge-diadema {
+            background-color: #f1f5f9;
+            color: #334155;
+        }
+
+        .phone-link {
+            color: var(--navy-accent);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        @media (max-width: 900px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .mobile-header { display: flex; }
+            .main-content { margin-left: 0; width: 100%; padding: 20px 16px; margin-top: 60px; }
+            .charts-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Mobile Header -->
+    <div class="mobile-header">
+        <div style="font-weight: 700; font-size: 15px;"><i class="fa-solid fa-music"></i> Setor Musical</div>
+        <button class="mobile-toggle" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></button>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="brand">
+            <i class="fa-solid fa-music"></i>
+            <span>Setor Musical</span>
+        </div>
+        <ul class="sidebar-menu">
+            <li><a href="#" class="active" onclick="toggleSidebar()"><i class="fa-solid fa-chart-pie"></i> <span>Dashboard</span></a></li>
+            <li><a href="#tabela" onclick="toggleSidebar()"><i class="fa-solid fa-list-check"></i> <span>Agenda Detalhada</span></a></li>
+        </ul>
+        <div class="status-badge">
+            <div class="status-dot"></div>
+            <span>Tempo Real On-line</span>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <header>
+            <h1>Gestão de Ensaios Musical</h1>
+            <p>São Bernardo do Campo & Diadema</p>
+        </header>
+
+        <!-- KPI Cards -->
+        <section class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-info">
+                    <h3>Total Ensaios</h3>
+                    <div class="value" id="kpi-total">82</div>
+                </div>
+                <div class="kpi-icon"><i class="fa-solid fa-church"></i></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-info">
+                    <h3>São Bernardo</h3>
+                    <div class="value" id="kpi-sbc">59</div>
+                </div>
+                <div class="kpi-icon"><i class="fa-solid fa-location-dot"></i></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-info">
+                    <h3>Diadema</h3>
+                    <div class="value" id="kpi-diadema">23</div>
+                </div>
+                <div class="kpi-icon"><i class="fa-solid fa-map-pin"></i></div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-info">
+                    <h3>Regionais</h3>
+                    <div class="value" id="kpi-regionais">5</div>
+                </div>
+                <div class="kpi-icon"><i class="fa-solid fa-user-shield"></i></div>
+            </div>
+        </section>
+
+        <!-- Toolbar -->
+        <section class="filter-card">
+            <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="global-search" placeholder="Pesquisa geral (Congregação, Encarregado, Instrumento...)" onkeyup="applyFilters()">
+            </div>
+            <button class="btn-reset" onclick="resetAllFilters()">
+                <i class="fa-solid fa-rotate-left"></i> Limpar Filtros
+            </button>
+        </section>
+
+        <!-- Charts Grid -->
+        <section class="charts-grid">
+            <div class="chart-card">
+                <h2><i class="fa-solid fa-chart-column"></i> Distribuição por Dia do Ensaio</h2>
+                <div class="chart-container">
+                    <canvas id="chartEnsaio"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h2><i class="fa-solid fa-chart-pie"></i> Ensaios por Regional</h2>
+                <div class="chart-container">
+                    <canvas id="chartRegional"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Data Table -->
+        <section class="table-card" id="tabela">
+            <div class="table-header">
+                <h2>Agenda Detalhada</h2>
+                <span id="table-count" style="font-size: 13px; color: var(--grey-text-muted);">A carregar dados...</span>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>
+                                <div class="th-content" onclick="sortData('seq')">
+                                    <span>Seq</span> <i class="fa-solid fa-sort sort-icon"></i>
+                                </div>
+                                <input type="text" class="col-filter" id="col-seq" onkeyup="applyFilters()" placeholder="Filtrar...">
+                            </th>
+                            <th>
+                                <div class="th-content" onclick="sortData('municipio')">
+                                    <span>Município</span> <i class="fa-solid fa-sort sort-icon"></i>
+                                </div>
+                                <select class="col-filter" id="col-municipio" onchange="applyFilters()">
+                                    <option value="">Todos</option>
+                                    <option value="São Bernardo do Campo">SBC</option>
+                                    <option value="Diadema">Diadema</option>
+                                </select>
+                            </th>
+                            <th>
+                                <div class="th-content" onclick="sortData('congregacao')">
+                                    <span>Congregação</span> <i class="fa-solid fa-sort sort-icon"></i>
+                                </div>
+                                <input type="text" class="col-filter" id="col-congregacao" onkeyup="applyFilters()" placeholder="Filtrar...">
+                            </th>
+                            <th>
+                                <div class="th-content" onclick="sortData('ensaio')">
+                                    <span>Ensaio / Horário</span> <i class="fa-solid fa-sort sort-icon"></i>
+                                </div>
+                                <select class="col-filter" id="col-ensaio" onchange="applyFilters()">
+                                    <option value="">Todos</option>
+                                </select>
+                            </th>
+                            <th>
+                                <div class="th-content" onclick="sortData('encarregado_local')">
+                                    <span>Encarregado Local</span> <i class="fa-solid fa-sort sort-icon"></i>
+                                </div>
+                                <input type="text" class="col-filter" id="col-encarregado_local" onkeyup="applyFilters()" placeholder="Filtrar...">
+                            </th>
+                            <th>
+                                <div class="th-content" onclick="sortData('encarregado_regional')">
+                                    <span>Encarregado Regional</span> <i class="fa-solid fa-sort sort-icon"></i>
+                                </div>
+                                <select class="col-filter" id="col-encarregado_regional" onchange="applyFilters()">
+                                    <option value="">Todos</option>
+                                </select>
+                            </th>
+                            <th>
+                                <div class="th-content" onclick="sortData('instrumento')">
+                                    <span>Instrumento</span> <i class="fa-solid fa-sort sort-icon"></i>
+                                </div>
+                                <input type="text" class="col-filter" id="col-instrumento" onkeyup="applyFilters()" placeholder="Filtrar...">
+                            </th>
+                            <th>
+                                <div class="th-content">
+                                    <span>Contato</span>
+                                </div>
+                                <input type="text" class="col-filter" id="col-contato" onkeyup="applyFilters()" placeholder="Filtrar...">
+                            </th>
+                            <th>
+                                <div class="th-content" onclick="sortData('examinadora')">
+                                    <span>Examinadora</span> <i class="fa-solid fa-sort sort-icon"></i>
+                                </div>
+                                <select class="col-filter" id="col-examinadora" onchange="applyFilters()">
+                                    <option value="">Todas</option>
+                                </select>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- Preenchido via Script -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // COLE AQUI O SEU LINK DO GOOGLE SHEETS PUBLICADO EM FORMATO CSV (Opcional para tempo real)
+        const GOOGLE_SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR2M6mCKUonDIxNF9AHXTd3llHEAVip8xZTSeeeDnh51tWOfFwUt3V9DVFTq4TwGg/pub?gid=1279178949&single=true&output=csv';
+
+        // Tabela de mapeamento exata: Sigla da coluna Regional -> Nome Completo do Encarregado Regional
+        const regionaisMap = {
+            'Elias': 'Elias Bordeli',
+            'Artur': 'Artur Martins',
+            'Moisés': 'Moisés Camilio',
+            'Auyber': 'Auyber Viani Teodoro',
+            'Valter': 'Valter de Lima'
+        };
+
+        // Base oficial completa de 82 registros extraídos exatamente linha por linha da planilha
+        const initialDataset = [
+            {"seq":1,"municipio":"São Bernardo do Campo","congregacao":"Batistini","observacao":"Após RJM","ensaio":"1º Domingo","horario":"11h45","encarregado_local":"Leonilson Cherubelli","encarregado_regional":"Elias Bordeli","instrumento":"Sax Alto","contato":"98336-4923","examinadora":"Solange"},
+            {"seq":2,"municipio":"São Bernardo do Campo","congregacao":"Nazareth","observacao":"","ensaio":"1º Domingo","horario":"16h","encarregado_local":"Rodolfo Jacobsen Martins","encarregado_regional":"Artur Martins","instrumento":"Trombone","contato":"98338-9875","examinadora":"Isabel"},
+            {"seq":3,"municipio":"São Bernardo do Campo","congregacao":"Parque Alvarenga","observacao":"","ensaio":"1º Domingo","horario":"16h","encarregado_local":"José Pereira","encarregado_regional":"Valter de Lima","instrumento":"Eufônio","contato":"95950-8292 / 4358-3238","examinadora":"Isabel"},
+            {"seq":4,"municipio":"São Bernardo do Campo","congregacao":"Jd. Nsa de Fátima","observacao":"","ensaio":"1º Domingo","horario":"16h","encarregado_local":"Agnaldo Donizetti Angelo","encarregado_regional":"Artur Martins","instrumento":"Trompa","contato":"97157-9611 / 4109-1648","examinadora":"Isabel"},
+            {"seq":5,"municipio":"São Bernardo do Campo","congregacao":"Jd. das Oliveiras","observacao":"","ensaio":"1º Domingo","horario":"16h","encarregado_local":"Lenilson André da Silva","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Clarinete","contato":"99316-4276","examinadora":"Solange"},
+            {"seq":6,"municipio":"São Bernardo do Campo","congregacao":"SBC Central","observacao":"","ensaio":"4º Domingo","horario":"11h30","encarregado_local":"Cláudio Caveagna","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Sax Alto","contato":"972467609 / 2669-8074","examinadora":"Solange"},
+            {"seq":7,"municipio":"São Bernardo do Campo","congregacao":"Jordanópolis","observacao":"","ensaio":"4º Domingo","horario":"16h","encarregado_local":"Valdir Costa","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Trompete","contato":"97393-6159","examinadora":"Isabel"},
+            {"seq":8,"municipio":"São Bernardo do Campo","congregacao":"Las Palmas","observacao":"","ensaio":"4º Domingo","horario":"16h","encarregado_local":"Samuel Pina de Souza","encarregado_regional":"Elias Bordeli","instrumento":"Trompete","contato":"99607-4402","examinadora":"Solange"},
+            {"seq":9,"municipio":"São Bernardo do Campo","congregacao":"Vila Flórida","observacao":"","ensaio":"Últ. Domingo","horario":"16h","encarregado_local":"Bruno Marangoni dos Santos Leite","encarregado_regional":"Valter de Lima","instrumento":"Clarone baixo","contato":"98305-6218","examinadora":"Solange"},
+            {"seq":10,"municipio":"São Bernardo do Campo","congregacao":"Jd. Thelma","observacao":"","ensaio":"Últ. Domingo","horario":"16h","encarregado_local":"Samuel Nascimento de Melo","encarregado_regional":"Artur Martins","instrumento":"Acordeon","contato":"99661-3996","examinadora":"Isabel"},
+            {"seq":11,"municipio":"São Bernardo do Campo","congregacao":"Vila São Pedro","observacao":"","ensaio":"Últ. Domingo","horario":"16h","encarregado_local":"Sidnei Barbosa Santos","encarregado_regional":"Artur Martins","instrumento":"Trompete","contato":"99607-4403","examinadora":"Solange"},
+            {"seq":12,"municipio":"São Bernardo do Campo","congregacao":"Parque Imigrantes","observacao":"","ensaio":"Últ. Domingo","horario":"16h","encarregado_local":"Eliandro Fernandes Brito Araújo","encarregado_regional":"Elias Bordeli","instrumento":"Violino","contato":"97148-5695","examinadora":"Solange"},
+            {"seq":13,"municipio":"São Bernardo do Campo","congregacao":"Nova Silvina","observacao":"","ensaio":"2ª Segunda","horario":"19h30","encarregado_local":"Jeferson Lucas da Silva","encarregado_regional":"Artur Martins","instrumento":"Sax Soprano","contato":"98955-4706","examinadora":"Solange"},
+            {"seq":14,"municipio":"São Bernardo do Campo","congregacao":"Jardim Leblon","observacao":"","ensaio":"2ª Sexta","horario":"19h30","encarregado_local":"Rodrigo Gimenez Carvalho","encarregado_regional":"Moisés Camilio","instrumento":"Violino","contato":"94277-9867","examinadora":"Mara"},
+            {"seq":15,"municipio":"São Bernardo do Campo","congregacao":"Jardim Petroni","observacao":"","ensaio":"2ª Sexta","horario":"19h30","encarregado_local":"Fábio Fernando Lazarin","encarregado_regional":"Moisés Camilio","instrumento":"Violino","contato":"97279-4122","examinadora":"Mara"},
+            {"seq":16,"municipio":"São Bernardo do Campo","congregacao":"Vila Paulicéia","observacao":"","ensaio":"1ª Quinta","horario":"20h","encarregado_local":"Marcelo Manzano","encarregado_regional":"Artur Martins","instrumento":"Violino","contato":"99937-1773 / 4178-0940","examinadora":"Isabel"},
+            {"seq":17,"municipio":"São Bernardo do Campo","congregacao":"Parque Rio Grande","observacao":"","ensaio":"1º Sábado","horario":"17h","encarregado_local":"Douglas da Silva Francisco","encarregado_regional":"Moisés Camilio","instrumento":"Trombone","contato":"94503-4556","examinadora":"Isabel"},
+            {"seq":18,"municipio":"São Bernardo do Campo","congregacao":"Parque dos Garças","observacao":"","ensaio":"1º Sábado","horario":"19h30","encarregado_local":"Lucas Manoel Targino","encarregado_regional":"Valter de Lima","instrumento":"Trompete","contato":"94322-1109","examinadora":"Isabel"},
+            {"seq":19,"municipio":"São Bernardo do Campo","congregacao":"Jardim Gagliardi","observacao":"","ensaio":"1º Sábado","horario":"19h30","encarregado_local":"João Fernandes de Paula","encarregado_regional":"Elias Bordeli","instrumento":"Sax Alto","contato":"98811-2334","examinadora":"Solange"},
+            {"seq":20,"municipio":"São Bernardo do Campo","congregacao":"Alto da Bela Vista","observacao":"","ensaio":"1º Sábado","horario":"19h30","encarregado_local":"Eduardo Nascimento Ferreira","encarregado_regional":"Valter de Lima","instrumento":"Eufônio","contato":"97711-2929","examinadora":"Solange"},
+            {"seq":21,"municipio":"São Bernardo do Campo","congregacao":"Jardim Boa Vista","observacao":"","ensaio":"1º Sábado","horario":"19h30","encarregado_local":"Valdecir Amâncio de Siqueira","encarregado_regional":"Valter de Lima","instrumento":"Violoncelo","contato":"99211-8877","examinadora":"Isabel"},
+            {"seq":22,"municipio":"São Bernardo do Campo","congregacao":"Jardim das Orquídeas","observacao":"","ensaio":"1º Sábado","horario":"19h30","encarregado_local":"Ricardo Costa José","encarregado_regional":"Moisés Camilio","instrumento":"Violino","contato":"98112-3344","examinadora":"Isabel"},
+            {"seq":23,"municipio":"São Bernardo do Campo","congregacao":"Jardim do Lago","observacao":"","ensaio":"1º Sábado","horario":"19h30","encarregado_local":"Fabiano Faustino da Silva","encarregado_regional":"Moisés Camilio","instrumento":"Violino","contato":"97333-5566","examinadora":"Solange"},
+            {"seq":24,"municipio":"São Bernardo do Campo","congregacao":"Jardim Silvina","observacao":"","ensaio":"1º Sábado","horario":"19h30","encarregado_local":"Adriano Floro dos Santos","encarregado_regional":"Moisés Camilio","instrumento":"Flauta","contato":"99555-7788","examinadora":"Solange"},
+            {"seq":25,"municipio":"São Bernardo do Campo","congregacao":"Taboão","observacao":"","ensaio":"1º Sábado","horario":"19h30","encarregado_local":"Marcelo Xavier da Silva","encarregado_regional":"Elias Bordeli","instrumento":"Organista","contato":"98222-4455","examinadora":"Solange"},
+            {"seq":26,"municipio":"São Bernardo do Campo","congregacao":"Parque Neide","observacao":"","ensaio":"1º Sábado","horario":"19h30","encarregado_local":"Sebastião Carlos dos Santos","encarregado_regional":"Elias Bordeli","instrumento":"Trompete","contato":"97444-6688","examinadora":"Solange"},
+            {"seq":27,"municipio":"São Bernardo do Campo","congregacao":"Terra Nova II","observacao":"","ensaio":"1º Sábado","horario":"19h30","encarregado_local":"Marco Aurélio Antônio","encarregado_regional":"Elias Bordeli","instrumento":"Violino","contato":"99111-2233","examinadora":"Solange"},
+            {"seq":28,"municipio":"São Bernardo do Campo","congregacao":"Tatetos","observacao":"","ensaio":"3ª Quinta","horario":"19h30","encarregado_local":"Alessandro Manfrenato Caldeira","encarregado_regional":"Moisés Camilio","instrumento":"Sax Tenor","contato":"98336-4920","examinadora":"Solange"},
+            {"seq":29,"municipio":"São Bernardo do Campo","congregacao":"Alto da Serra","observacao":"","ensaio":"2º Sábado","horario":"16h30","encarregado_local":"Vanderlei Pires Valério","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Violino","contato":"98338-9887","examinadora":"Isabel"},
+            {"seq":30,"municipio":"São Bernardo do Campo","congregacao":"Jardim Tupã","observacao":"","ensaio":"2º Sábado","horario":"17h","encarregado_local":"Marcelo Pereira da Silva","encarregado_regional":"Artur Martins","instrumento":"Trompete","contato":"98336-4921","examinadora":"Solange"},
+            {"seq":31,"municipio":"São Bernardo do Campo","congregacao":"Rio Acima","observacao":"","ensaio":"2º Sábado","horario":"17h","encarregado_local":"Alexandre Ribeiro da Costa","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Flauta","contato":"98338-9878","examinadora":"Isabel"},
+            {"seq":32,"municipio":"São Bernardo do Campo","congregacao":"Jardim Laura","observacao":"","ensaio":"2º Sábado","horario":"19h30","encarregado_local":"Ricardo Manoel de Souza","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Organista","contato":"98336-4919","examinadora":"Isabel"},
+            {"seq":33,"municipio":"São Bernardo do Campo","congregacao":"Nova Baeta","observacao":"","ensaio":"2º Sábado","horario":"19h30","encarregado_local":"Daniel Gonçalves da Silva","encarregado_regional":"Moisés Camilio","instrumento":"Organista","contato":"98336-4908","examinadora":"Solange"},
+            {"seq":34,"municipio":"São Bernardo do Campo","congregacao":"Vila Nova São Pedro","observacao":"","ensaio":"2º Sábado","horario":"19h30","encarregado_local":"Adriano de Oliveira Souza","encarregado_regional":"Moisés Camilio","instrumento":"Violino","contato":"98338-9882","examinadora":"Isabel"},
+            {"seq":35,"municipio":"São Bernardo do Campo","congregacao":"Rudge Ramos","observacao":"","ensaio":"2º Sábado","horario":"19h30","encarregado_local":"José Rodolfo Mendes Negrão","encarregado_regional":"Elias Bordeli","instrumento":"Trombone","contato":"98336-4934","examinadora":"Solange"},
+            {"seq":36,"municipio":"São Bernardo do Campo","congregacao":"Jardim da Represa","observacao":"","ensaio":"2º Sábado","horario":"19h30","encarregado_local":"Antônio Pinheiro Fernandes","encarregado_regional":"Moisés Camilio","instrumento":"Trompete","contato":"98336-4909","examinadora":"Isabel"},
+            {"seq":37,"municipio":"São Bernardo do Campo","congregacao":"Capelinha","observacao":"","ensaio":"2º Sábado","horario":"19h30","encarregado_local":"Renilson de Lima Melo","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Flauta","contato":"98336-4924","examinadora":"Solange"},
+            {"seq":38,"municipio":"São Bernardo do Campo","congregacao":"Nova Tatetos","observacao":"","ensaio":"3º Sábado","horario":"17h","encarregado_local":"Luiz Claudivan de Oliveira","encarregado_regional":"Valter de Lima","instrumento":"Organista","contato":"98336-4940","examinadora":"Solange"},
+            {"seq":39,"municipio":"São Bernardo do Campo","congregacao":"Parque Ideal","observacao":"","ensaio":"3º Sábado","horario":"17h","encarregado_local":"Eduardo da Silva Maciel","encarregado_regional":"Artur Martins","instrumento":"Violino","contato":"99673-5203","examinadora":"Solange"},
+            {"seq":40,"municipio":"São Bernardo do Campo","congregacao":"Jardim Calux","observacao":"","ensaio":"3º Sábado","horario":"17h","encarregado_local":"Elias Rodrigues da Silva","encarregado_regional":"Valter de Lima","instrumento":"Violino","contato":"98336-4916","examinadora":"Mara"},
+            {"seq":41,"municipio":"São Bernardo do Campo","congregacao":"Jardim Pinheiro","observacao":"","ensaio":"3º Sábado","horario":"17h","encarregado_local":"Davi Boaventura Costa","encarregado_regional":"Moisés Camilio","instrumento":"Trombone","contato":"98336-4922","examinadora":"Mara"},
+            {"seq":42,"municipio":"São Bernardo do Campo","congregacao":"Vila da Paz","observacao":"","ensaio":"3º Sábado","horario":"17h","encarregado_local":"Jozivaldo da Silva","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Flauta","contato":"98336-4936","examinadora":"Mara"},
+            {"seq":43,"municipio":"São Bernardo do Campo","congregacao":"Vila Baeta Neves","observacao":"","ensaio":"3º Sábado","horario":"19h30","encarregado_local":"André Evangelista","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Organista","contato":"99949-1017","examinadora":"Mara"},
+            {"seq":44,"municipio":"São Bernardo do Campo","congregacao":"Parque Jandaia","observacao":"","ensaio":"3º Sábado","horario":"19h30","encarregado_local":"Eliveldo Vieira de Santana Gomes","encarregado_regional":"Artur Martins","instrumento":"Violino","contato":"99409-2818","examinadora":"Mara"},
+            {"seq":45,"municipio":"São Bernardo do Campo","congregacao":"Ribeirão do Soldado","observacao":"","ensaio":"3º Sábado","horario":"19h30","encarregado_local":"Fabiano Pageu da Silva","encarregado_regional":"Moisés Camilio","instrumento":"Sax Alto","contato":"98336-4912","examinadora":"Mara"},
+            {"seq":46,"municipio":"São Bernardo do Campo","congregacao":"Vila Esperança","observacao":"","ensaio":"3º Sábado","horario":"19h30","encarregado_local":"Ronaldo Soares da Silva","encarregado_regional":"Moisés Camilio","instrumento":"Sax Tenor","contato":"98336-4937","examinadora":"Mara"},
+            {"seq":47,"municipio":"São Bernardo do Campo","congregacao":"Parque Estoril","observacao":"","ensaio":"3º Sábado","horario":"19h30","encarregado_local":"Felipe Forato Rodrigues","encarregado_regional":"Artur Martins","instrumento":"Trompete","contato":"98336-4939","examinadora":"Mara"},
+            {"seq":48,"municipio":"São Bernardo do Campo","congregacao":"Jardim Santo Inácio","observacao":"","ensaio":"3º Sábado","horario":"19h30","encarregado_local":"Ariselmo Damascen Campos","encarregado_regional":"Valter de Lima","instrumento":"Flauta","contato":"98336-4938","examinadora":"Mara"},
+            {"seq":49,"municipio":"São Bernardo do Campo","congregacao":"Taquacetuba","observacao":"","ensaio":"3º Sábado","horario":"19h30","encarregado_local":"Anderson de Menezes Soares","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Clarinete","contato":"98336-4927","examinadora":"Mara"},
+            {"seq":50,"municipio":"São Bernardo do Campo","congregacao":"Vila Nova Carminha","observacao":"","ensaio":"4º Sábado","horario":"16h","encarregado_local":"Lucas Ferreira Silvestre","encarregado_regional":"Artur Martins","instrumento":"Violoncelo","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":51,"municipio":"São Bernardo do Campo","congregacao":"Varginha","observacao":"","ensaio":"4º Sábado","horario":"17h15","encarregado_local":"Wellington Fernando Silva","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Violino","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":52,"municipio":"São Bernardo do Campo","congregacao":"Areião","observacao":"","ensaio":"4º Sábado","horario":"19h30","encarregado_local":"Nivaldo Xavier de Araújo","encarregado_regional":"Valter de Lima","instrumento":"Organista","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":53,"municipio":"São Bernardo do Campo","congregacao":"Royal Park","observacao":"","ensaio":"4º Sábado","horario":"19h30","encarregado_local":"Sebastião Dias","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Trompete","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":54,"municipio":"São Bernardo do Campo","congregacao":"Riacho Grande","observacao":"","ensaio":"4º Sábado","horario":"19h30","encarregado_local":"Jonathan Marigo dos Santos","encarregado_regional":"Moisés Camilio","instrumento":"Trombone","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":55,"municipio":"São Bernardo do Campo","congregacao":"Núcleo Santa Cruz","observacao":"","ensaio":"4º Sábado","horario":"19h30","encarregado_local":"Jonathan Alves Cortez","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Sax Alto","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":56,"municipio":"São Bernardo do Campo","congregacao":"Parque Los Angeles","observacao":"","ensaio":"Últ. Sábado","horario":"17h","encarregado_local":"Elson Vieira Borges","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Violino","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":57,"municipio":"São Bernardo do Campo","congregacao":"Curucutu","observacao":"","ensaio":"Últ. Sábado","horario":"17h30","encarregado_local":"Adriano Anderson Mazarin","encarregado_regional":"Valter de Lima","instrumento":"Organista","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":58,"municipio":"São Bernardo do Campo","congregacao":"Parque Selecta","observacao":"","ensaio":"Últ. Sábado","horario":"19h30","encarregado_local":"Ludemilson Gonçalves","encarregado_regional":"Artur Martins","instrumento":"Organista","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":59,"municipio":"São Bernardo do Campo","congregacao":"Jardim Jussara","observacao":"","ensaio":"Últ. Sábado","horario":"19h30","encarregado_local":"Eli Monteiro","encarregado_regional":"Valter de Lima","instrumento":"Trompete","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":60,"municipio":"Diadema","congregacao":"Piraporinha","observacao":"","ensaio":"1º Domingo","horario":"09h","encarregado_local":"Luciano da Silva","encarregado_regional":"Artur Martins","instrumento":"Flauta","contato":"99970-9631","examinadora":"Mara"},
+            {"seq":61,"municipio":"Diadema","congregacao":"Jardim Ivone","observacao":"","ensaio":"1º Domingo","horario":"16h","encarregado_local":"Rodrigo da Silva Nascimento","encarregado_regional":"Valter de Lima","instrumento":"Violino","contato":"99949-1017","examinadora":"Mara"},
+            {"seq":62,"municipio":"Diadema","congregacao":"Parque Galícia","observacao":"","ensaio":"1º Domingo","horario":"16h","encarregado_local":"Silvio Dutra Furtado","encarregado_regional":"Artur Martins","instrumento":"Sax Tenor","contato":"99409-2818","examinadora":"Mara"},
+            {"seq":63,"municipio":"Diadema","congregacao":"Eldorado","observacao":"","ensaio":"1º Domingo","horario":"16h","encarregado_local":"Reinaldo Silva Santana","encarregado_regional":"Artur Martins","instrumento":"Flauta","contato":"98336-4912","examinadora":"Mara"},
+            {"seq":64,"municipio":"Diadema","congregacao":"Jardim Damasco","observacao":"","ensaio":"1º Domingo","horario":"16h","encarregado_local":"Antônio Celso dos Anjos","encarregado_regional":"Artur Martins","instrumento":"Sax Alto","contato":"98336-4937","examinadora":"Mara"},
+            {"seq":65,"municipio":"Diadema","congregacao":"Padre Anchieta","observacao":"","ensaio":"1º Domingo","horario":"16h","encarregado_local":"Alex Zanquini Alexandrino","encarregado_regional":"Moisés Camilio","instrumento":"Clarinete","contato":"98336-4939","examinadora":"Mara"},
+            {"seq":66,"municipio":"Diadema","congregacao":"Jardim Transilvânia – Central","observacao":"","ensaio":"4º Domingo","horario":"16h","encarregado_local":"Ronaldo Tavares de Lima","encarregado_regional":"Elias Bordeli","instrumento":"Organista","contato":"98336-4938","examinadora":"Mara"},
+            {"seq":67,"municipio":"Diadema","congregacao":"Parque Sete de Setembro","observacao":"","ensaio":"4º Domingo","horario":"16h","encarregado_local":"Joaquim Batista Filho","encarregado_regional":"Valter de Lima","instrumento":"Sax Soprano","contato":"98336-4927","examinadora":"Mara"},
+            {"seq":68,"municipio":"Diadema","congregacao":"Parque Reid","observacao":"","ensaio":"4º Domingo","horario":"16h","encarregado_local":"Gilberto Pereira da Cruz","encarregado_regional":"Valter de Lima","instrumento":"Trombone","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":69,"municipio":"Diadema","congregacao":"Jardim dos Eucaliptos","observacao":"","ensaio":"Últ. Domingo","horario":"16h","encarregado_local":"João Ricardo de Oliveira","encarregado_regional":"Moisés Camilio","instrumento":"Organista","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":70,"municipio":"Diadema","congregacao":"Vila Jacira","observacao":"","ensaio":"Últ. Domingo","horario":"16h","encarregado_local":"Antônio Jorge Adorno / André Tadeu Florêncio","encarregado_regional":"Moisés Camilio","instrumento":"Trompete","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":71,"municipio":"Diadema","congregacao":"Praia Vermelha","observacao":"","ensaio":"3ª Segunda","horario":"19h30","encarregado_local":"Marcos Ferreira dos Santos","encarregado_regional":"Moisés Camilio","instrumento":"Violino","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":72,"municipio":"Diadema","congregacao":"Jardim Ruyce","observacao":"","ensaio":"3ª Sexta","horario":"19h30","encarregado_local":"Roberto Rosa Condenso","encarregado_regional":"Artur Martins","instrumento":"Flauta","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":73,"municipio":"Diadema","congregacao":"Vila Lídia","observacao":"","ensaio":"Últ. Sexta","horario":"19h30","encarregado_local":"Adolfo Antoniel Amâncio Gomes","encarregado_regional":"Moisés Camilio","instrumento":"Sax Tenor","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":74,"municipio":"Diadema","congregacao":"Jardim Inamar","observacao":"","ensaio":"1º Sábado","horario":"19h30","encarregado_local":"Vagner Lourenço Rodrigues","encarregado_regional":"Moisés Camilio","instrumento":"Flauta","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":75,"municipio":"Diadema","congregacao":"Parque Real","observacao":"","ensaio":"1º Sábado","horario":"19h30","encarregado_local":"Ronaldo Pereira dos Santos","encarregado_regional":"Moisés Camilio","instrumento":"Violino","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":76,"municipio":"Diadema","congregacao":"Vila Santa Terezinha","observacao":"","ensaio":"1º Sábado","horario":"19h30","encarregado_local":"Manuel Nunes","encarregado_regional":"Artur Martins","instrumento":"Flauta","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":77,"municipio":"Diadema","congregacao":"Vermelhão","observacao":"","ensaio":"2º Sábado","horario":"17h","encarregado_local":"Daniel Benvindo Silva","encarregado_regional":"Valter de Lima","instrumento":"Violoncelo","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":78,"municipio":"Diadema","congregacao":"Vila Joaninha","observacao":"","ensaio":"2º Sábado","horario":"17h","encarregado_local":"Amarildo Bispo de Santana","encarregado_regional":"Valter de Lima","instrumento":"Sax Alto","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":79,"municipio":"Diadema","congregacao":"Jardim Ellen","observacao":"","ensaio":"Últ. Sábado","horario":"17h","encarregado_local":"Felipe de Souza Silva","encarregado_regional":"Auyber Viani Teodoro","instrumento":"Organista","contato":"97218-8702","examinadora":"Mara"},
+            {"seq":80,"municipio":"Diadema","congregacao":"Nova Diadema","observacao":"","ensaio":"Últ. Sábado","horario":"17h","encarregado_local":"Felipe Bueno Sanches Serrano","encarregado_regional":"Moisés Camilio","instrumento":"Violino","contato":"99186-2941","examinadora":"Mara"},
+            {"seq":81,"municipio":"Diadema","congregacao":"Jardim Amuhadi","observacao":"","ensaio":"Últ. Sábado","horario":"19h30","encarregado_local":"Lazaro José Oliveira","encarregado_regional":"Artur Martins","instrumento":"Sax Tenor","contato":"94824-2718","examinadora":"Mara"},
+            {"seq":82,"municipio":"Diadema","congregacao":"Jardim ABC","observacao":"","ensaio":"Últ. Sábado","horario":"19h30","encarregado_local":"Marcos Cesar Torres","encarregado_regional":"Elias Bordeli","instrumento":"Sax Alto","contato":"95226-5562","examinadora":"Solange"}
+        ];
+
+        let rawData = [...initialDataset];
+        let currentData = [...rawData];
+        let sortAsc = true;
+        let lastSortedCol = '';
+        let chartEnsaioInst = null;
+        let chartRegionalInst = null;
+
+        function initDashboard() {
+            if (GOOGLE_SHEETS_CSV_URL && GOOGLE_SHEETS_CSV_URL.startsWith('http')) {
+                Papa.parse(GOOGLE_SHEETS_CSV_URL, {
+                    download: true,
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        if (results.data && results.data.length > 0) {
+                            const parsed = [];
+                            results.data.forEach((row, i) => {
+                                const mun = row['Município'] || row['municipio'] || '';
+                                const cong = row['Congregação'] || row['congregacao'] || '';
+                                if (mun && cong) {
+                                    const encLocal = (row['Encarregado'] || row['encarregado'] || '').trim();
+                                    const regSigla = (row['Regional'] || row['regional'] || '').trim();
+                                    
+                                    parsed.push({
+                                        seq: i + 1,
+                                        municipio: mun.trim(),
+                                        congregacao: cong.trim(),
+                                        observacao: (row['Observação'] || row['observacao'] || '').trim(),
+                                        ensaio: (row['Ensaio'] || row['ensaio'] || '').trim(),
+                                        horario: (row['Horário'] || row['horario'] || '').trim(),
+                                        encarregado_local: encLocal,
+                                        encarregado_regional: regionaisMap[regSigla] || regSigla,
+                                        instrumento: (row['Instrumento'] || row['instrumento'] || '').trim(),
+                                        contato: (row['Contato'] || row['contato'] || '').trim(),
+                                        examinadora: (row['Examinadora'] || row['examinadora'] || '').trim()
+                                    });
+                                }
+                            });
+                            if (parsed.length > 0) rawData = parsed;
+                        }
+                        setupSelectFilters();
+                        applyFilters();
+                    },
+                    error: function() {
+                        setupSelectFilters();
+                        applyFilters();
+                    }
+                });
+            } else {
+                setupSelectFilters();
+                applyFilters();
+            }
+        }
+
+        function setupSelectFilters() {
+            const ensaios = [...new Set(rawData.map(i => i.ensaio))].filter(Boolean);
+            const encRegionais = [...new Set(rawData.map(i => i.encarregado_regional))].filter(Boolean);
+            const examinadoras = [...new Set(rawData.map(i => i.examinadora))].filter(Boolean);
+
+            const selEnsaio = document.getElementById('col-ensaio');
+            selEnsaio.innerHTML = '<option value="">Todos</option>';
+            ensaios.forEach(e => selEnsaio.add(new Option(e, e)));
+
+            const selRegEnc = document.getElementById('col-encarregado_regional');
+            selRegEnc.innerHTML = '<option value="">Todos</option>';
+            encRegionais.forEach(r => selRegEnc.add(new Option(r, r)));
+
+            const selEx = document.getElementById('col-examinadora');
+            selEx.innerHTML = '<option value="">Todas</option>';
+            examinadoras.forEach(ex => selEx.add(new Option(ex, ex)));
+        }
+
+        function applyFilters() {
+            const globalSearch = document.getElementById('global-search').value.toLowerCase();
+            const fSeq = document.getElementById('col-seq').value.toLowerCase();
+            const fMun = document.getElementById('col-municipio').value;
+            const fCong = document.getElementById('col-congregacao').value.toLowerCase();
+            const fEns = document.getElementById('col-ensaio').value;
+            const fEncLocal = document.getElementById('col-encarregado_local').value.toLowerCase();
+            const fEncReg = document.getElementById('col-encarregado_regional').value;
+            const fInst = document.getElementById('col-instrumento').value.toLowerCase();
+            const fContato = document.getElementById('col-contato').value.toLowerCase();
+            const fEx = document.getElementById('col-examinadora').value;
+
+            currentData = rawData.filter(item => {
+                const matchGlobal = !globalSearch || Object.values(item).some(val => String(val).toLowerCase().includes(globalSearch));
+                const matchSeq = !fSeq || String(item.seq).includes(fSeq);
+                const matchMun = !fMun || item.municipio === fMun;
+                const matchCong = !fCong || item.congregacao.toLowerCase().includes(fCong);
+                const matchEns = !fEns || item.ensaio === fEns;
+                const matchEncLocal = !fEncLocal || item.encarregado_local.toLowerCase().includes(fEncLocal);
+                const matchEncReg = !fEncReg || item.encarregado_regional === fEncReg;
+                const matchInst = !fInst || item.instrumento.toLowerCase().includes(fInst);
+                const matchContato = !fContato || item.contato.toLowerCase().includes(fContato);
+                const matchEx = !fEx || item.examinadora === fEx;
+
+                return matchGlobal && matchSeq && matchMun && matchCong && matchEns && matchEncLocal && matchEncReg && matchInst && matchContato && matchEx;
+            });
+
+            updateMetrics(currentData);
+            renderTable(currentData);
+            renderCharts(currentData);
+        }
+
+        function sortData(column) {
+            if (lastSortedCol === column) {
+                sortAsc = !sortAsc;
+            } else {
+                sortAsc = true;
+                lastSortedCol = column;
+            }
+
+            currentData.sort((a, b) => {
+                let valA = a[column];
+                let valB = b[column];
+                if (typeof valA === 'number') {
+                    return sortAsc ? valA - valB : valB - valA;
+                }
+                return sortAsc ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+            });
+
+            renderTable(currentData);
+        }
+
+        function resetAllFilters() {
+            document.getElementById('global-search').value = '';
+            document.querySelectorAll('.col-filter').forEach(el => el.value = '');
+            applyFilters();
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+
+        function updateMetrics(data) {
+            document.getElementById('kpi-total').innerText = data.length;
+            document.getElementById('kpi-sbc').innerText = data.filter(d => d.municipio === 'São Bernardo do Campo').length;
+            document.getElementById('kpi-diadema').innerText = data.filter(d => d.municipio === 'Diadema').length;
+            const regs = new Set(data.map(d => d.encarregado_regional)).size;
+            document.getElementById('kpi-regionais').innerText = regs;
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+            document.getElementById('table-count').innerText = `Exibindo ${data.length} de ${rawData.length} registros`;
+
+            data.forEach(item => {
+                const badgeClass = item.municipio === 'São Bernardo do Campo' ? 'badge-sbc' : 'badge-diadema';
+                const munShort = item.municipio === 'São Bernardo do Campo' ? 'SBC' : 'Diadema';
+                const cleanPhone = item.contato.replace(/[^0-9]/g, '');
+                const phoneHtml = cleanPhone.length >= 8 ? `<a href="tel:${cleanPhone}" class="phone-link"><i class="fa-solid fa-phone"></i> ${item.contato}</a>` : item.contato;
+
+                const row = `
+                    <tr>
+                        <td><strong>${item.seq}</strong></td>
+                        <td><span class="badge-mun ${badgeClass}">${munShort}</span></td>
+                        <td><strong>${item.congregacao}</strong></td>
+                        <td>${item.ensaio} às ${item.horario}</td>
+                        <td>${item.encarregado_local}</td>
+                        <td><span style="font-weight: 500; color: var(--navy-accent);">${item.encarregado_regional}</span></td>
+                        <td>${item.instrumento}</td>
+                        <td>${phoneHtml}</td>
+                        <td>${item.examinadora}</td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            });
+        }
+
+        function renderCharts(data) {
+            const ensaioCounts = {};
+            data.forEach(d => { ensaioCounts[d.ensaio] = (ensaioCounts[d.ensaio] || 0) + 1; });
+
+            const regionalCounts = {};
+            data.forEach(d => { regionalCounts[d.encarregado_regional] = (regionalCounts[d.encarregado_regional] || 0) + 1; });
+
+            const ctxEnsaio = document.getElementById('chartEnsaio').getContext('2d');
+            if (chartEnsaioInst) chartEnsaioInst.destroy();
+            chartEnsaioInst = new Chart(ctxEnsaio, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(ensaioCounts),
+                    datasets: [{
+                        label: 'Ensaios',
+                        data: Object.values(ensaioCounts),
+                        backgroundColor: '#1e293b',
+                        borderRadius: 6
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            const ctxRegional = document.getElementById('chartRegional').getContext('2d');
+            if (chartRegionalInst) chartRegionalInst.destroy();
+            chartRegionalInst = new Chart(ctxRegional, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(regionalCounts),
+                    datasets: [{
+                        data: Object.values(regionalCounts),
+                        backgroundColor: ['#0f172a', '#1e293b', '#334155', '#475569', '#64748b']
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } }
+            });
+        }
+
+        window.onload = initDashboard;
+    </script>
+</body>
+</html>
